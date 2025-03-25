@@ -1,56 +1,77 @@
 #!/usr/bin/python3
-"""Module to count and print occurrences of keywords in hot posts."""
+"""A script that counts the number of occurrences of list of words
+in a given subreddit."""
 
+from audioop import reverse
 import requests
 
+headers = {'User-Agent': 'MyAPI/0.0.1'}
 
-def count_words(subreddit, word_list, counts=None, after=None, is_initial=True):
-    """Counts and prints keyword occurrences in hot posts.
-    
-    Args:
-        subreddit (str): The subreddit to query.
-        word_list (list): Keywords to count.
-        counts (dict): Accumulator for keyword counts.
-        after (str): Pagination token.
-        is_initial (bool): Flag for initial call.
-    """
-    if counts is None:
-        counts = {}
-    if is_initial:
-        word_list = [word.lower() for word in word_list]
-        counts.clear()
-    
-    headers = {'User-Agent': 'MyBot/0.0.1'}
-    url = f'https://www.reddit.com/r/{subreddit}/hot.json'
-    params = {'after': after} if after else {}
-    response = requests.get(url, headers=headers, params=params, allow_redirects=False)
-    
-    if response.status_code != 200:
-        if is_initial:
+
+def count_words(subreddit, word_list, after="", hot_list=[]):
+    """print the sorted count of word_list."""
+
+    subreddit_url = "https://reddit.com/r/{}/hot.json".format(subreddit)
+
+    parameters = {'limit': 100, 'after': after}
+    response = requests.get(subreddit_url, headers=headers, params=parameters)
+
+    if response.status_code == 200:
+
+        # print(response.status_code)
+        json_data = response.json()
+        if (json_data.get('data').get('dist') == 0):
             return
+        # get the 'after' value from the response to pass it on the request
+
+        # get title and append it to the hot_list
+        for child in json_data.get('data').get('children'):
+            title = child.get('data').get('title')
+            hot_list.append(title)
+
+        # variable after indicates if there is data on the next pagination
+        # on the reddit API after holds a unique name for that subreddit page.
+        # if it is None it indicates it is the last page.
+        after = json_data.get('data').get('after')
+        if after is not None:
+            # print("got next page")
+            # print(len(hot_list))
+            return count_words(subreddit, word_list,
+                               after=after, hot_list=hot_list)
         else:
-            return
-    
-    data = response.json().get('data', {})
-    for post in data.get('children', []):
-        title = post.get('data', {}).get('title', '').lower()
-        for word in word_list:
-            counts[word] = counts.get(word, 0) + title.split().count(word)
-    
-    new_after = data.get('after')
-    if new_after:
-        count_words(subreddit, word_list, counts, new_after, False)
-    elif is_initial:
-        sorted_counts = sorted(counts.items(), key=lambda x: (-x[1], x[0]))
-        for word, count in sorted_counts:
-            if count > 0:
-                print(f"{word}: {count}")
+            # put the initial words counter dictionary
+            counter = {}
+            for word in word_list:
+                word = word.lower()
+                if word not in counter.keys():
+                    counter[word] = 0
+                else:
+                    counter[word] += 1
+            # loop through the hot_list to check if word is found in the list
+            for title in hot_list:
+                title_list = title.lower().split(' ')
+                for word in counter.keys():
+                    search_word = "{}".format(word)
+                    if search_word in title_list:
+                        counter[word] += 1
+            sorted_counter = dict(
+                sorted(counter.items(),
+                       key=lambda item: item[1], reverse=True))
+            for key, value in sorted_counter.items():
+                if value > 0:
+                    print("{}: {}".format(key, value))
+            # print(hot_list)
+
+    else:
+        return
 
 
 if __name__ == '__main__':
-    import sys
-    if len(sys.argv) < 3:
-        print("Usage: {} <subreddit> <list of keywords>".format(sys.argv[0]))
-        print("Ex: {} programming 'python java javascript'".format(sys.argv[0]))
-    else:
-        count_words(sys.argv[1], [x for x in sys.argv[2].split()])
+    count_words("hello", ['REDDIT', 'german', 'HI', 'whynot'])
+    count_words('unpopular', ['down', 'vote', 'downvote',
+                              'you', 'her', 'unpopular', 'politics'])
+    # count_words("hello", ['hello', 'hello', 'hello'])
+    # count_words("unpopular", ["react", "python", "java",
+    # "javascript", "scala", "no_result_for_this"])
+
+    # count_words('hello', ['hello', 'hello', 'hello'])
